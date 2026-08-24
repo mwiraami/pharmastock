@@ -39,10 +39,11 @@ Puis ouvrez l'adresse affichée. Dans Chrome ou Edge, utilisez « Installer l'ap
 - décrément de stock et journal des mouvements ;
 - tableau de bord et rapports de ventes ;
 - cache applicatif PWA et persistance IndexedDB hors connexion.
+- mise à jour temps réel entre les modules et les onglets ouverts sur le même appareil ;
 
 ## Limites de cette version
 
-Cette version reste une application locale : elle ne fournit pas encore l'API Node/Express, PostgreSQL/Prisma, les refresh tokens JWT, ni l'isolation multi-pharmacies côté serveur. Ces éléments sont indispensables avant un déploiement multi-utilisateur en production.
+Cette version reste une application locale : la synchronisation temps réel concerne les onglets du même appareil. Elle ne synchronise pas encore plusieurs ordinateurs et le backend Node/Express, PostgreSQL/Prisma et l'isolation multi-pharmacies ne couvrent pas encore tous les modules.
 
 ## Suite recommandée
 
