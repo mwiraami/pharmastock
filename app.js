@@ -1,7 +1,57 @@
 const DB = "pharmastock", SYNC_KEY = "pharmastock-data-change", STORES = ["settings","users","categories","suppliers","customers","patients","products","batches","movements","sales","cash","inventories","notifications","audit","licenses"];
 
-let db, syncTimer, state={pharmacy:null,currentUser:null,products:[],batches:[],cart:[],page:"dashboard",openBatchForm:false,api:{available:false,accessToken:null,refreshToken:null}};
+let db, syncTimer, state={pharmacy:null,currentUser:null,products:[],batches:[],cart:[],page:"dashboard",openBatchForm:false,api:{available:false,accessToken:null,refreshToken:null},installPrompt:null};
 const syncChannel="BroadcastChannel"in window?new BroadcastChannel(SYNC_KEY):null;
+
+window.addEventListener("beforeinstallprompt",event=>{
+  event.preventDefault();
+  state.installPrompt=event;
+});
+
+function registerServiceWorker(){
+  if(!("serviceWorker"in navigator))return;
+  navigator.serviceWorker.register("./sw.js",{scope:"./",updateViaCache:"none"}).then(registration=>{
+    registration.addEventListener("updatefound",()=>{
+      const worker=registration.installing;
+      if(!worker)return;
+      worker.addEventListener("statechange",()=>{
+        if(worker.state==="installed" && navigator.serviceWorker.controller){
+          note("Une nouvelle version est disponible. Mise à jour en cours...");
+          setTimeout(()=>window.location.reload(),1200);
+        }
+      });
+    });
+  }).catch(()=>{});
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{
+    window.location.reload();
+  });
+}
+
+async function readDesktopSnapshot(){
+  if(!window.electronAPI?.readSnapshot) return null;
+  try { return await window.electronAPI.readSnapshot(); } catch { return null; }
+}
+
+async function writeDesktopSnapshot(){
+  if(!window.electronAPI?.writeSnapshot) return;
+  try {
+    const snapshot = {};
+    for(const store of STORES){ snapshot[store]=await all(store); }
+    await window.electronAPI.writeSnapshot(snapshot);
+  } catch (error) {
+    console.warn("Desktop snapshot write failed", error);
+  }
+}
+
+async function restoreDesktopSnapshot(){
+  const snapshot = await readDesktopSnapshot();
+  if(!snapshot || typeof snapshot !== "object") return;
+  for(const store of STORES){
+    for(const item of snapshot[store] || []){
+      await put(store, item);
+    }
+  }
+}
 
 const $=s=>document.querySelector(s), id=()=>crypto.randomUUID(), day=()=>new Date().toISOString().slice(0,10), esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])), isActive=p=>String(p.status||"ACTIVE").toUpperCase()==="ACTIVE";
 
@@ -26,7 +76,7 @@ r.onsuccess=()=>{db=r.result;
 ok()};
 r.onerror=()=>no(r.error)})}function all(s){return new Promise(ok=>{let r=db.transaction(s).objectStore(s).getAll();
 r.onsuccess=()=>ok(r.result)})}function put(s,x){return new Promise(ok=>{let r=db.transaction(s,"readwrite").objectStore(s).put(x);
-r.onsuccess=()=>{notifyChange(s);ok()}})}
+r.onsuccess=()=>{notifyChange(s); writeDesktopSnapshot(); ok();}})}
 async function refresh(){state.products=await all("products");
 for(const product of state.products){product.status=String(product.status||"ACTIVE").toUpperCase()}
 state.batches=await all("batches");
@@ -37,11 +87,12 @@ document.body.append(e);
 setTimeout(()=>e.remove(),2500)}
 async function init(){await open();
 document.body.dataset.theme=localStorage.getItem("pharmastock-theme")||"light";
+await restoreDesktopSnapshot();
 await detectApi();
 state.pharmacy=(await all("settings")).find(x=>x.id==="pharmacy");
-if(state.pharmacy){let sessionId=sessionStorage.getItem("pharmastock-user"),users=await all("users");state.currentUser=users.find(user=>user.id===sessionId&&user.active);state.api.accessToken=sessionStorage.getItem("pharmastock-access-token");state.api.refreshToken=sessionStorage.getItem("pharmastock-refresh-token")}
+if(state.pharmacy){let sessionId=sessionStorage.getItem("pharmastock-user"),users=await all("users");state.currentUser=users.find(user=>user.id===sessionId&&user.active);state.api.accessToken=sessionStorage.getItem("pharmastock-access-token");state.api.refreshToken=sessionStorage.getItem("pharmastock-refresh-token")} 
 await refresh();
-if("serviceWorker"in navigator&&location.protocol!=="file:")navigator.serviceWorker.register("./sw.js");
+if("serviceWorker"in navigator&&location.protocol!=="file:")registerServiceWorker();
 render()}
 function login(){
 $("#app").innerHTML=`<section class="setup"><div class="brand">✚ PharmaStock</div><h1>Connexion</h1><p class="muted">${esc(state.pharmacy.name)} · Accès sécurisé</p><form id="login"><label>E-mail ou nom d'utilisateur<input required name="identity" autocomplete="username"></label><label>Mot de passe<input required name="password" type="password" autocomplete="current-password"></label><button>Se connecter</button></form></section>`;
@@ -62,9 +113,9 @@ render()}}
 function fields(a){return a.map(([n,l,t,r,v=""])=>`<label>${l}<input ${r?"required":""} name="${n}" type="${t}" value="${esc(v)}"></label>`).join("")}
 function shell(content){let nav=[["dashboard","Tableau de bord"],["sale","Ventes"],["cash","Caisse"],["products","Produits"],["categories","Catégories"],["batches","Lots & expirations"],["stock","Stock / Mouvements"],["suppliers","Fournisseurs"],["customers","Clients"],["patients","Patients"],["inventory","Inventaire"],["users","Utilisateurs"],["reports","Rapports"],["license","Licence"],["notifications","Notifications"],["audit","Journal d'activité"],["settings","Paramètres"]],role=state.currentUser?.role;
 if(role!=="ADMINISTRATEUR")nav=nav.filter(([page])=>!["users","license","audit","settings"].includes(page));
-$("#app").innerHTML=`<div class="app"><aside class="sidebar"><h1>✚ PharmaStock</h1><nav class="nav">${nav.map(x=>`<button class="${state.page===x[0]?"active":""}" data-p="${x[0]}">${x[1]}</button>`).join("")}</nav></aside><main class="content"><header class="topbar"><div><div class="brand">${esc(state.pharmacy.name)}</div><span class="muted">${esc(state.pharmacy.city)} · ${esc(state.currentUser?.firstName||"")} ${esc(state.currentUser?.lastName||"")} · ${esc(role||"")}</span></div><div class="topbar-actions"><span class="offline">${navigator.onLine?"● En ligne":"● Hors connexion"}</span><button id="logout" class="secondary">Déconnexion</button></div></header>${content}</main></div>`;
+$("#app").innerHTML=`<div class="app"><aside class="sidebar"><h1>✚ PharmaStock</h1><nav class="nav">${nav.map(x=>`<button class="${state.page===x[0]?"active":""}" data-p="${x[0]}">${x[1]}</button>`).join("")}</nav></aside><main class="content"><header class="topbar"><div><div class="brand">${esc(state.pharmacy.name)}</div><span class="muted">${esc(state.pharmacy.city)} · ${esc(state.currentUser?.firstName||"")} ${esc(state.currentUser?.lastName||"")} · ${esc(role||"")}</span></div><div class="topbar-actions"><span class="offline">${navigator.onLine?"● En ligne":"● Hors connexion"}</span><button id="install-pwa" class="secondary">Télécharger</button><button id="logout" class="secondary">Déconnexion</button></div></header>${content}</main></div>`;
 document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{state.page=b.dataset.p;
-render()});$("#logout").onclick=async()=>{await audit("Déconnexion","Authentification");sessionStorage.removeItem("pharmastock-user");state.currentUser=null;render()}}
+render()});$("#logout").onclick=async()=>{await audit("Déconnexion","Authentification");sessionStorage.removeItem("pharmastock-user");state.currentUser=null;render()};$("#install-pwa").addEventListener("click",async()=>{if(state.installPrompt){ const prompt=state.installPrompt; state.installPrompt=null; prompt.prompt(); const choice=await prompt.userChoice; if(choice.outcome==="accepted") note("Installation de l’application en cours..."); else note("L’installation a été refusée."); render(); return;} note("Dans votre navigateur, utilisez Installer l’application dans le menu de votre navigateur pour l’ajouter à l’écran d’accueil.");})}
 function status(b){return b.expiry<day()?"EXPIRE":b.expiry<=new Date(Date.now()+30*864e5).toISOString().slice(0,10)?"ATTENTION":"NORMAL"}async function generateAlerts(){let existing=await all("notifications"),add=async(key,title,message,level)=>{if(existing.some(n=>n.autoKey===key))return;
 let n={id:id(),autoKey:key,title,message,level,status:"UNREAD",createdAt:new Date().toISOString()};
 await put("notifications",n);

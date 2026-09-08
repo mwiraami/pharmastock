@@ -3,12 +3,44 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "main.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check app.js && node --check sw.js && node --check server.js",
+    "desktop": "electron .",
+    "dev": "ELECTRON_START_URL=http://localhost:4173 electron .",
+    "check": "node --check app.js && node --check sw.js && node --check server.js && node --check main.js && node --check preload.js && node --check desktop-storage.js",
     "backend:dev": "npm --prefix backend run dev",
     "backend:build": "npm --prefix backend run build",
     "db:generate": "npm --prefix backend run db:generate",
-    "db:migrate": "npm --prefix backend run db:migrate"
+    "db:migrate": "npm --prefix backend run db:migrate",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.pharmastock.desktop",
+    "productName": "PharmaStock",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!backend/**",
+      "!dist/**",
+      "!tests/**"
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "PharmaStock-Setup-${version}.exe"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.4",
+    "electron-builder": "^24.13.0"
   }
 }

@@ -29,6 +29,17 @@ npm.cmd run start
 
 Puis ouvrez l'adresse affichée. Dans Chrome ou Edge, utilisez « Installer l'application » pour l'utiliser comme application installée.
 
+## Version desktop installable
+
+Pour obtenir une vraie application de bureau avec mise à jour propre et données conservées entre les versions :
+
+```powershell
+npm install
+npm run dist
+```
+
+Le programme est installé dans le dossier des données utilisateur sous le nom PharmaStock, ce qui protège les données enregistrées pendant les mises à jour. L'application passe automatiquement par l'appData utilisateur et n'écrase pas les fichiers de données existants.
+
 ## Fonctionnalités actuelles
 
 - assistant de création de pharmacie et administrateur ;
@@ -48,3 +59,5 @@ Cette version reste une application locale : la synchronisation temps réel conc
 ## Suite recommandée
 
 La prochaine phase consiste à extraire les modèles métier dans PostgreSQL/Prisma et à faire passer les écritures critiques (réception, sortie, inventaire et vente FEFO) dans des transactions backend. IndexedDB pourra ensuite servir de cache hors connexion, avec une file de synchronisation contrôlée côté serveur.
+
+

@@ -2,9 +2,12 @@
   "name": "PharmaStock",
   "short_name": "PharmaStock",
   "description": "Gestion de pharmacie hors connexion",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f0fdfa",
   "theme_color": "#0f766e",
+  "orientation": "portrait",
   "icons": []
 }
